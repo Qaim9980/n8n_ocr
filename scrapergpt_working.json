@@ -1,0 +1,313 @@
+{
+  "name": "Daraz Wireless Mouse Scraper",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "manual-trigger",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://www.daraz.pk/search?q=wireless+mouse",
+        "method": "GET",
+        "headers": {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+          "Accept": "text/html,application/xhtml+xml",
+          "Accept-Language": "en-US,en;q=0.9",
+          "Referer": "https://www.daraz.pk/"
+        },
+        "authentication": "none",
+        "sendBody": false,
+        "followRedirects": true
+      },
+      "id": "fetch-search",
+      "name": "Fetch Search Results",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const html = $input.first().body;\nconst productUrls = [];\nconst linkRegex = /href=['\\\"](\\/p\\/[^\\/]*)['\\\"].*?data-qa-locator/gi;\nlet match;\nwhile ((match = linkRegex.exec(html)) !== null) {\n  if (match[1] && !productUrls.includes(match[1])) {\n    productUrls.push('https://www.daraz.pk' + match[1]);\n  }\n}\nreturn { productUrls: productUrls.slice(0, 10) };"
+      },
+      "id": "parse-search",
+      "name": "Parse Search Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "productUrls"
+      },
+      "id": "split-items",
+      "name": "Split Out Items",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "unit": "seconds",
+        "amount": 3
+      },
+      "id": "wait-node",
+      "name": "Wait 3 Seconds",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [1050, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.productUrls }}",
+        "method": "GET",
+        "headers": {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+          "Accept": "text/html,application/xhtml+xml",
+          "Accept-Language": "en-US,en;q=0.9",
+          "Referer": "https://www.daraz.pk/"
+        },
+        "authentication": "none",
+        "sendBody": false,
+        "followRedirects": true
+      },
+      "id": "fetch-product",
+      "name": "Fetch Product Detail",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1250, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const html = $input.first().body;\nconst productData = {\n  name: '',\n  price: '',\n  rating: 0,\n  reviews: 0,\n  imageUrl: '',\n  productUrl: $json.productUrls || '',\n  date: new Date().toISOString().split('T')[0]\n};\ntry {\n  const titleMatch = html.match(/<h1[^>]*>([^<]+)<\\/h1>/);\n  productData.name = titleMatch ? titleMatch[1].trim() : '';\n  const priceMatch = html.match(/span[^>]*class=['\\\"].*?price.*?['\\\"][^>]*>₨\\s*([0-9,]+)/);\n  productData.price = priceMatch ? priceMatch[1].replace(/,/g, '') : '';\n  const ratingMatch = html.match(/\"rating\\\"\\s*:\\s*([0-9.]+)/);\n  productData.rating = ratingMatch ? parseFloat(ratingMatch[1]) : 0;\n  const reviewMatch = html.match(/\"reviewCount\\\"\\s*:\\s*(\\d+)/);\n  productData.reviews = reviewMatch ? parseInt(reviewMatch[1]) : 0;\n  const imageMatch = html.match(/<img[^>]*class=['\\\"].*?main.*?['\\\"][^>]*src=['\\\"]([^'\\\"]+)/);\n  productData.imageUrl = imageMatch ? imageMatch[1] : '';\n} catch (e) {\n  productData.error = e.message;\n}\nreturn productData;"
+      },
+      "id": "extract-details",
+      "name": "Extract Product Details",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1450, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "rules": [
+            {
+              "value1": "={{ $json.name }}",
+              "value2": "",
+              "operation": "notEmpty"
+            },
+            {
+              "value1": "={{ $json.price }}",
+              "value2": "",
+              "operation": "notEmpty"
+            }
+          ]
+        }
+      },
+      "id": "validate-data",
+      "name": "Validate Data",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1650, 300]
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "value": "YOUR_SHEET_ID_HERE",
+          "mode": "list"
+        },
+        "sheetName": {
+          "value": "gid=0",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": null,
+          "schema": [
+            {
+              "id": "name",
+              "displayName": "Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "price",
+              "displayName": "Price",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "rating",
+              "displayName": "Rating",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "reviews",
+              "displayName": "Reviews",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "imageUrl",
+              "displayName": "Image URL",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "productUrl",
+              "displayName": "Product URL",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            },
+            {
+              "id": "date",
+              "displayName": "Date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": true,
+          "convertFieldsToString": false
+        }
+      },
+      "id": "save-sheets",
+      "name": "Save to Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [1850, 300],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "YOUR_CREDENTIALS_ID",
+          "name": "Your Google Account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch Search Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Search Results": {
+      "main": [
+        [
+          {
+            "node": "Parse Search Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Search Results": {
+      "main": [
+        [
+          {
+            "node": "Split Out Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Out Items": {
+      "main": [
+        [
+          {
+            "node": "Wait 3 Seconds",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 3 Seconds": {
+      "main": [
+        [
+          {
+            "node": "Fetch Product Detail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Product Detail": {
+      "main": [
+        [
+          {
+            "node": "Extract Product Details",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Product Details": {
+      "main": [
+        [
+          {
+            "node": "Validate Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Data": {
+      "main": [
+        [
+          {
+            "node": "Save to Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

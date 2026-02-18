@@ -1,0 +1,584 @@
+{
+  "name": "Product Research Chatbot",
+  "nodes": [
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "chat-trigger",
+      "name": "Chat - Ask Product",
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        240,
+        300
+      ],
+      "webhookId": "product-research-chat"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "product_query",
+              "name": "product_query",
+              "value": "={{ $json.chatInput }}",
+              "type": "string"
+            },
+            {
+              "id": "search_urls",
+              "name": "search_urls",
+              "value": "=[\n  \"https://www.amazon.com/s?k={{ encodeURIComponent($json.chatInput) }}\",\n  \"https://www.ebay.com/sch/i.html?_nkw={{ encodeURIComponent($json.chatInput) }}\",\n  \"https://www.walmart.com/search?q={{ encodeURIComponent($json.chatInput) }}\",\n  \"https://www.newegg.com/p/pl?d={{ encodeURIComponent($json.chatInput) }}\",\n  \"https://www.bestbuy.com/site/searchpage.jsp?st={{ encodeURIComponent($json.chatInput) }}\"\n]",
+              "type": "array"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "prepare-searches",
+      "name": "Prepare Search URLs",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.3,
+      "position": [
+        460,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "search_urls",
+        "options": {}
+      },
+      "id": "split-urls",
+      "name": "Split Out Items",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        680,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "url",
+              "name": "url",
+              "value": "={{ $json.search_urls }}",
+              "type": "string"
+            },
+            {
+              "id": "source",
+              "name": "source",
+              "value": "={{ $json.search_urls.includes('amazon') ? 'Amazon' : $json.search_urls.includes('ebay') ? 'eBay' : $json.search_urls.includes('walmart') ? 'Walmart' : $json.search_urls.includes('newegg') ? 'Newegg' : 'BestBuy' }}",
+              "type": "string"
+            },
+            {
+              "id": "search_query",
+              "name": "search_query",
+              "value": "={{ $json.product_query }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "extract-source",
+      "name": "Extract Source Info",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.3,
+      "position": [
+        850,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000,
+          "redirect": {
+            "redirect": {
+              "followRedirects": true,
+              "maxRedirects": 5
+            }
+          }
+        }
+      },
+      "id": "fetch-products",
+      "name": "Fetch Product Pages",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1040,
+        300
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "html_content",
+              "name": "html_content",
+              "value": "={{ $json.body || $json.data || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "source_url",
+              "name": "source_url",
+              "value": "={{ $json.url }}",
+              "type": "string"
+            },
+            {
+              "id": "source_name",
+              "name": "source_name",
+              "value": "={{ $json.source }}",
+              "type": "string"
+            },
+            {
+              "id": "search_query",
+              "name": "search_query",
+              "value": "={{ $json.search_query }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "prepare-for-ai",
+      "name": "Prepare for AI",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.3,
+      "position": [
+        1240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Analyze this HTML content from {{ $json.source_name }} for the search query: \"{{ $json.search_query }}\"\n\nHTML Content (first 5000 chars):\n{{ $json.html_content.substring(0, 5000) }}\n\nExtract ALL products found and return as JSON array with this structure:\n\n[\n  {\n    \"website_name\": \"{{ $json.source_name }}\",\n    \"website_url\": \"{{ $json.source_url }}\",\n    \"product_name\": \"\",\n    \"product_url\": \"\",\n    \"price\": \"\",\n    \"currency\": \"USD\",\n    \"availability\": \"In Stock or Out of Stock\",\n    \"rating\": 0,\n    \"number_of_reviews\": 0,\n    \"is_bestseller\": false,\n    \"review_summary\": \"\",\n    \"quality_score\": 0\n  }\n]\n\nRules:\n- Extract TOP 10 products only\n- If price not found, use \"N/A\"\n- Rating should be 0-5 scale\n- quality_score: 1-10 based on rating and reviews\n- Return ONLY valid JSON array, no markdown",
+        "options": {}
+      },
+      "id": "extract-products-ai",
+      "name": "Extract Products with AI",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.4,
+      "position": [
+        1340,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "gemini-extract",
+      "name": "Gemini - Extract",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        1340,
+        500
+      ],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "YOUR_GOOGLE_CREDENTIAL_ID",
+          "name": "Google Gemini account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "options": {}
+      },
+      "id": "combine-results",
+      "name": "Combine All Results",
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        1560,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are a product comparison expert.\n\nAll Products Found:\n{{ JSON.stringify($json.data, null, 2) }}\n\nAnalyze and create a comprehensive comparison report:\n\n1. BEST PRODUCTS (Top 5):\n   - Rank by quality_score, rating, and reviews\n   - Show price comparison\n   - Highlight best value\n\n2. AVAILABILITY SUMMARY:\n   - Count in-stock vs out-of-stock\n   - List all in-stock options\n\n3. PRICE ANALYSIS:\n   - Cheapest option\n   - Most expensive option\n   - Average price\n   - Best value for money\n\n4. BEST SELLERS:\n   - List all products marked as bestseller\n\n5. WEBSITE COMPARISON:\n   - Which website has best prices?\n   - Which has most options?\n   - Which has best-rated products?\n\n6. FINAL RECOMMENDATION:\n   - Top 3 products to buy\n   - Reasons for each\n   - Direct links\n\nFormat: Clear, structured text for easy reading.",
+        "options": {}
+      },
+      "id": "analyze-compare-ai",
+      "name": "Analyze & Compare",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.4,
+      "position": [
+        1780,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "gemini-analyze",
+      "name": "Gemini - Analyze",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        1780,
+        500
+      ],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "YOUR_GOOGLE_CREDENTIAL_ID",
+          "name": "Google Gemini account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract all product data from combined results\nconst items = $input.all();\nconst searchQuery = $('Chat - Ask Product').first().json.chatInput;\nconst timestamp = new Date().toISOString();\n\nconst products = [];\n\n// Process each item from Combine All Results\nfor (const item of items) {\n  const data = item.json.data;\n  \n  if (Array.isArray(data)) {\n    for (const entry of data) {\n      // Check if entry has text field with JSON\n      if (entry.text) {\n        try {\n          const parsed = JSON.parse(entry.text);\n          if (Array.isArray(parsed)) {\n            for (const product of parsed) {\n              products.push({\n                timestamp: timestamp,\n                search_query: searchQuery,\n                website_name: product.website_name || '',\n                website_url: product.website_url || '',\n                product_name: product.product_name || '',\n                product_url: product.product_url || '',\n                price: product.price || 'N/A',\n                currency: product.currency || 'USD',\n                availability: product.availability || '',\n                rating: product.rating || 0,\n                number_of_reviews: product.number_of_reviews || 0,\n                is_bestseller: product.is_bestseller ? 'Yes' : 'No',\n                review_summary: product.review_summary || '',\n                quality_score: product.quality_score || 0\n              });\n            }\n          }\n        } catch (e) {\n          // If parsing fails, skip this entry\n          console.log('Failed to parse:', e.message);\n        }\n      }\n    }\n  }\n}\n\n// If no products found, return at least one empty row to show the search was done\nif (products.length === 0) {\n  products.push({\n    timestamp: timestamp,\n    search_query: searchQuery,\n    website_name: 'No results',\n    website_url: '',\n    product_name: 'No products found',\n    product_url: '',\n    price: 'N/A',\n    currency: 'USD',\n    availability: 'N/A',\n    rating: 0,\n    number_of_reviews: 0,\n    is_bestseller: 'No',\n    review_summary: '',\n    quality_score: 0\n  });\n}\n\nreturn products;"
+      },
+      "id": "format-for-sheets",
+      "name": "Format for Google Sheets",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2000,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_SHEET_ID",
+          "mode": "list"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Sheet1",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "timestamp",
+              "displayName": "Timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "search_query",
+              "displayName": "Search Query",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "website_name",
+              "displayName": "Website Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "website_url",
+              "displayName": "Website URL",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "product_name",
+              "displayName": "Product Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "product_url",
+              "displayName": "Product URL",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "price",
+              "displayName": "Price",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "currency",
+              "displayName": "Currency",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "availability",
+              "displayName": "Availability",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "rating",
+              "displayName": "Rating",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "number_of_reviews",
+              "displayName": "Number of Reviews",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "is_bestseller",
+              "displayName": "Best Seller",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "review_summary",
+              "displayName": "Review Summary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "quality_score",
+              "displayName": "Quality Score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "save-to-sheets",
+      "name": "Save to Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [
+        2220,
+        300
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "YOUR_GOOGLE_SHEETS_CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Chat - Ask Product": {
+      "main": [
+        [
+          {
+            "node": "Prepare Search URLs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Search URLs": {
+      "main": [
+        [
+          {
+            "node": "Split Out Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Out Items": {
+      "main": [
+        [
+          {
+            "node": "Extract Source Info",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Source Info": {
+      "main": [
+        [
+          {
+            "node": "Fetch Product Pages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Product Pages": {
+      "main": [
+        [
+          {
+            "node": "Prepare for AI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare for AI": {
+      "main": [
+        [
+          {
+            "node": "Extract Products with AI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini - Extract": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Extract Products with AI",
+            "type": "ai_languageModel",
+            "index": 0
+          },
+          {
+            "node": "Analyze & Compare",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Products with AI": {
+      "main": [
+        [
+          {
+            "node": "Combine All Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Combine All Results": {
+      "main": [
+        [
+          {
+            "node": "Analyze & Compare",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Format for Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini - Analyze": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Analyze & Compare",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format for Google Sheets": {
+      "main": [
+        [
+          {
+            "node": "Save to Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2025-12-13T00:00:00.000Z",
+  "versionId": "1"
+}

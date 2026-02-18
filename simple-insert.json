@@ -1,0 +1,141 @@
+{
+  "name": "Simple JSON to Database",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "manual-trigger",
+      "name": "Manual Input",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "jsonData",
+        "jsonData": "[\n  {\n    \"roll_no\": \"21001\",\n    \"name\": \"John Doe\",\n    \"sgpa\": 8.5,\n    \"result\": \"Pass\"\n  },\n  {\n    \"roll_no\": \"21002\",\n    \"name\": \"Jane Smith\",\n    \"sgpa\": 9.2,\n    \"result\": \"Pass\"\n  },\n  {\n    \"roll_no\": \"21003\",\n    \"name\": \"Mike Johnson\",\n    \"sgpa\": 7.8,\n    \"result\": \"Pass\"\n  }\n]",
+        "options": {}
+      },
+      "id": "set-json-data",
+      "name": "Set JSON Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.3,
+      "position": [
+        460,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "schema": {
+          "__rl": true,
+          "value": "public",
+          "mode": "list"
+        },
+        "table": {
+          "__rl": true,
+          "value": "student_results",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "roll_no",
+              "displayName": "roll_no",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "name",
+              "displayName": "name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "sgpa",
+              "displayName": "sgpa",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "result",
+              "displayName": "result",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "insert-to-db",
+      "name": "Insert to Database",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        680,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "YOUR_POSTGRES_CREDENTIAL_ID",
+          "name": "Postgres account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Manual Input": {
+      "main": [
+        [
+          {
+            "node": "Set JSON Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set JSON Data": {
+      "main": [
+        [
+          {
+            "node": "Insert to Database",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2025-12-11T00:00:00.000Z",
+  "versionId": "1"
+}

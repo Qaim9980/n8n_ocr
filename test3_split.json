@@ -1,0 +1,39 @@
+{
+  "name": "Test 3 - Split Out",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "1",
+      "name": "Start",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "return { items: ['item1', 'item2', 'item3'] };"
+      },
+      "id": "2",
+      "name": "Code",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "items"
+      },
+      "id": "3",
+      "name": "Split",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [650, 300]
+    }
+  ],
+  "connections": {
+    "Start": {"main": [[{"node": "Code", "type": "main", "index": 0}]]},
+    "Code": {"main": [[{"node": "Split", "type": "main", "index": 0}]]}
+  },
+  "active": false,
+  "settings": {}
+}

@@ -1,0 +1,112 @@
+{
+  "name": "Multi Marketplace Product Research",
+  "nodes": [
+    {
+      "parameters": {
+        "url": "https://serpapi.com/search.json",
+        "method": "GET",
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "engine",
+              "value": "google_shopping"
+            },
+            {
+              "name": "q",
+              "value": "Wireless Mouse"
+            },
+            {
+              "name": "api_key",
+              "value": "SERPAPI_API_KEY"
+            },
+            {
+              "name": "num",
+              "value": "100"
+            }
+          ]
+        }
+      },
+      "name": "SerpAPI Search",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "return items[0].json.shopping_results\n  .filter(p => p.link && p.rating)\n  .map(p => ({\n    json: {\n      product_name: p.title || \"Not Available\",\n      price: p.price || \"Not Available\",\n      rating: p.rating || 0,\n      reviews: p.reviews || 0,\n      url: p.link,\n      source: p.source || \"Unknown\"\n    }\n  }));"
+      },
+      "name": "Clean Product Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 2,
+      "position": [420, 300]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o-mini",
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are an expert ecommerce product analysis agent."
+          },
+          {
+            "role": "user",
+            "content": "Analyze the following products and categorize them into 30 HIGH, 30 MEDIUM, 30 LOW quality wireless mouse products. Use rating, reviews and popularity. Return STRICT JSON optimized for Google Sheets.\n\n{{$json}}"
+          }
+        ],
+        "temperature": 0.2
+      },
+      "name": "AI Product Analyzer",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 2,
+      "position": [650, 300],
+      "credentials": {
+        "openAiApi": {
+          "id": "OPENAI_API_KEY",
+          "name": "OpenAI Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const data = JSON.parse(items[0].json.choices[0].message.content);\n\nconst rows = [];\n\n['high_quality','medium_quality','low_quality'].forEach(level => {\n  data[level].forEach(p => {\n    rows.push({ json: {\n      Platform: p.platform || 'Unknown',\n      'Product Name': p.product_name,\n      Brand: p.brand || 'Not Available',\n      Price: p.price,\n      Rating: p.rating,\n      Reviews: p.total_reviews,\n      Sales: p.estimated_sales || 'N/A',\n      Quality: p.quality_category,\n      URL: p.product_url,\n      Summary: p.summary,\n      Reason: p.quality_reason\n    }});\n  });\n});\n\nreturn rows;"
+      },
+      "name": "Prepare Google Sheet Rows",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 2,
+      "position": [880, 300]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "sheetId": "GOOGLE_SHEET_ID",
+        "range": "Sheet1!A1"
+      },
+      "name": "Save to Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [1100, 300],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "GOOGLE_SHEETS_CREDENTIAL",
+          "name": "Google Sheets Account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "SerpAPI Search": {
+      "main": [[{ "node": "Clean Product Data", "type": "main", "index": 0 }]]
+    },
+    "Clean Product Data": {
+      "main": [[{ "node": "AI Product Analyzer", "type": "main", "index": 0 }]]
+    },
+    "AI Product Analyzer": {
+      "main": [[{ "node": "Prepare Google Sheet Rows", "type": "main", "index": 0 }]]
+    },
+    "Prepare Google Sheet Rows": {
+      "main": [[{ "node": "Save to Google Sheets", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "version": 1
+}

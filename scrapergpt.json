@@ -1,0 +1,416 @@
+{
+  "name": "Daraz & Temu Wireless Mouse Scraper",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "0ba1a74d-5e3d-4c1e-8a5f-1234567890ab",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [-300, 0]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "searchKeyword",
+              "name": "searchKeyword",
+              "value": "=\"wireless mouse\"",
+              "type": "string"
+            },
+            {
+              "id": "platform",
+              "name": "platform",
+              "value": "=\"daraz\"",
+              "type": "string"
+            },
+            {
+              "id": "baseUrl",
+              "name": "baseUrl",
+              "value": "=\"https://www.daraz.pk\"",
+              "type": "string"
+            },
+            {
+              "id": "searchUrl",
+              "name": "searchUrl",
+              "value": "={{ $json.baseUrl + '/search?q=' + encodeURIComponent($json.searchKeyword) }}",
+              "type": "string"
+            },
+            {
+              "id": "productUrls",
+              "name": "productUrls",
+              "value": "=[]",
+              "type": "array"
+            }
+          ]
+        }
+      },
+      "id": "a1b2c3d4-e5f6-4g7h-8i9j-0k1l2m3n4o5p",
+      "name": "Set Variables",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.3,
+      "position": [-100, 0]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.searchUrl }}",
+        "method": "GET",
+        "headers": {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+          "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+          "Accept-Language": "en-US,en;q=0.9",
+          "Accept-Encoding": "gzip, deflate, br",
+          "Connection": "keep-alive",
+          "Upgrade-Insecure-Requests": "1",
+          "Referer": "https://www.daraz.pk/",
+          "DNT": "1",
+          "Sec-Fetch-Dest": "document",
+          "Sec-Fetch-Mode": "navigate",
+          "Sec-Fetch-Site": "none",
+          "Cache-Control": "max-age=0"
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [100, 0],
+      "id": "b2c3d4e5-f6g7-4h8i-9j0k-1l2m3n4o5p6q",
+      "name": "Fetch Search Results"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse HTML and extract product links using regex and DOM parsing\nconst html = $input.first().body;\nconst productUrls = [];\n\n// Daraz specific - extract from data-qa-locator and href attributes\nconst linkRegex = /href=['\\\"](\\/[^\\/].*?)['\\\"].*?data-qa-locator=['\\\"]product-item['\\\"]|href=['\\\"](\\/p\\/[^\\/]*)['\\\"]>/gi;\nlet match;\n\nwhile ((match = linkRegex.exec(html)) !== null) {\n  const url = match[1] || match[2];\n  if (url && !productUrls.includes(url)) {\n    productUrls.push(url);\n  }\n}\n\n// Alternative: Extract from script tags if available (Daraz uses dynamic data)\nconst scriptRegex = /window\\.__INITIAL_STATE__\\s*=\\s*({.*?});/s;\nconst scriptMatch = html.match(scriptRegex);\nif (scriptMatch) {\n  try {\n    const data = JSON.parse(scriptMatch[1]);\n    // Navigate through the data structure based on Daraz's format\n    if (data.listModule && data.listModule.data && data.listModule.data.items) {\n      data.listModule.data.items.forEach(item => {\n        if (item.productUrl) {\n          const fullUrl = item.productUrl.startsWith('http') ? item.productUrl : 'https://www.daraz.pk' + item.productUrl;\n          if (!productUrls.includes(fullUrl)) {\n            productUrls.push(fullUrl);\n          }\n        }\n      });\n    }\n  } catch (e) {\n    console.log('Could not parse embedded JSON');\n  }\n}\n\n// Limit to first 20 products for testing\nconst limitedUrls = productUrls.slice(0, 20).filter(url => \n  url && (url.includes('/p/') || url.includes('product'))\n);\n\nreturn {\n  productUrls: limitedUrls,\n  totalFound: limitedUrls.length,\n  timestamp: new Date().toISOString()\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [300, 0],
+      "id": "c3d4e5f6-g7h8-4i9j-0k1l-2m3n4o5p6q7r",
+      "name": "Parse Search Results"
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "productUrls"
+      },
+      "id": "d4e5f6g7-h8i9-4j0k-1l2m-3n4o5p6q7r8s",
+      "name": "Split Out Items",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [500, 0]
+    },
+    {
+      "parameters": {
+        "unit": "seconds",
+        "amount": 2
+      },
+      "id": "e5f6g7h8-i9j0-4k1l-2m3n-4o5p6q7r8s9t",
+      "name": "Wait 2 Seconds",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [700, 0]
+    },
+    {
+      "parameters": {
+        "url": "={{ 'https://www.daraz.pk' + $json.productUrls }}",
+        "method": "GET",
+        "headers": {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+          "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+          "Accept-Language": "en-US,en;q=0.9",
+          "Accept-Encoding": "gzip, deflate, br",
+          "Connection": "keep-alive",
+          "Referer": "https://www.daraz.pk/",
+          "DNT": "1"
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 0],
+      "id": "f6g7h8i9-j0k1-4l2m-3n4o-5p6q7r8s9t0u",
+      "name": "Fetch Product Detail"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract product details from HTML and embedded JSON\nconst html = $input.first().body;\nconst productData = {\n  name: '',\n  price: '',\n  discount: '',\n  rating: 0,\n  reviews: 0,\n  imageUrl: '',\n  productUrl: $input.first().headers.url || '',\n  storeName: '',\n  source: 'daraz',\n  date: new Date().toISOString().split('T')[0]\n};\n\ntry {\n  // Try to extract from __INITIAL_STATE__ or similar Daraz data structure\n  const stateRegex = /window\\.__INITIAL_STATE__\\s*=\\s*({.*?});/s;\n  const stateMatch = html.match(stateRegex);\n  \n  if (stateMatch) {\n    const data = JSON.parse(stateMatch[1]);\n    // Navigate the data structure\n    if (data.pageModule && data.pageModule.productDetail) {\n      const detail = data.pageModule.productDetail;\n      productData.name = detail.title || detail.name || '';\n      productData.price = detail.price || detail.originalPrice || '';\n      productData.discount = detail.discount || '';\n      productData.rating = detail.rating || 0;\n      productData.reviews = detail.reviewCount || 0;\n      if (detail.images && detail.images.length > 0) {\n        productData.imageUrl = detail.images[0].url || '';\n      }\n      productData.storeName = detail.seller || detail.shopName || '';\n    }\n  }\n\n  // Fallback: Extract from meta tags if JSON parsing fails\n  if (!productData.name) {\n    // Title\n    const titleMatch = html.match(/<h1[^>]*>([^<]+)<\\/h1>/);\n    productData.name = titleMatch ? titleMatch[1].trim() : '';\n    \n    // Price from span with specific class\n    const priceMatch = html.match(/span[^>]*class=['\\\"].*?price.*?['\\\"][^>]*>([^<]+)<\\/span>/i);\n    productData.price = priceMatch ? priceMatch[1].replace(/[^0-9.]/g, '') : '';\n    \n    // Rating\n    const ratingMatch = html.match(/rating['\\\"]\\s*:\\s*([0-9.]+)|<span[^>]*class=['\\\"].*?rating.*?['\\\"][^>]*>([0-9.]+)<\\/span>/i);\n    productData.rating = ratingMatch ? parseFloat(ratingMatch[1] || ratingMatch[2]) : 0;\n    \n    // Review count\n    const reviewMatch = html.match(/reviews?['\\\"]\\s*:\\s*(\\d+)|<span[^>]*class=['\\\"].*?review.*?['\\\"][^>]*>(\\d+)<\\/span>/i);\n    productData.reviews = reviewMatch ? parseInt(reviewMatch[1] || reviewMatch[2]) : 0;\n    \n    // Image URL\n    const imageMatch = html.match(/<img[^>]*class=['\\\"].*?main.*?['\\\"][^>]*src=['\\\"]([^'\\\"]+)['\\\"][^>]*>/i);\n    productData.imageUrl = imageMatch ? imageMatch[1] : '';\n  }\n\n  // Verify it's actually a wireless mouse\n  const name = productData.name.toLowerCase();\n  if (!name.includes('wireless') || !name.includes('mouse')) {\n    productData.isWirelessMouse = false;\n  } else {\n    productData.isWirelessMouse = true;\n  }\n\n} catch (e) {\n  console.log('Error parsing product details:', e.message);\n  productData.error = e.message;\n}\n\nreturn productData;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1100, 0],
+      "id": "g7h8i9j0-k1l2-4m3n-4o5p-6q7r8s9t0u1v",
+      "name": "Extract Product Details"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "rules": [
+            {
+              "value1": "={{ $json.name }}",
+              "value2": "",
+              "operation": "notEmpty"
+            },
+            {
+              "value1": "={{ $json.price }}",
+              "value2": "",
+              "operation": "notEmpty"
+            },
+            {
+              "value1": "={{ $json.isWirelessMouse }}",
+              "value2": true,
+              "operation": "equals"
+            }
+          ]
+        }
+      },
+      "id": "h8i9j0k1-l2m3-4n4o-5p6q-7r8s9t0u1v2w",
+      "name": "Validate Product Data",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1300, 0]
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_SHEET_ID",
+          "mode": "list"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Name",
+              "displayName": "Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Price",
+              "displayName": "Price",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Discount",
+              "displayName": "Discount",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Rating",
+              "displayName": "Rating",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Reviews",
+              "displayName": "Reviews",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "imageUrl",
+              "displayName": "Image URL",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "productUrl",
+              "displayName": "Product URL",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "storeName",
+              "displayName": "Store",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "source",
+              "displayName": "Source",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "date",
+              "displayName": "Date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": true,
+          "convertFieldsToString": false
+        }
+      },
+      "id": "i9j0k1l2-m3n4-4o5p-6q7r-8s9t0u1v2w3x",
+      "name": "Save to Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [1500, 0],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "YOUR_CREDENTIALS_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Set Variables",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Variables": {
+      "main": [
+        [
+          {
+            "node": "Fetch Search Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Search Results": {
+      "main": [
+        [
+          {
+            "node": "Parse Search Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Search Results": {
+      "main": [
+        [
+          {
+            "node": "Split Out Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Out Items": {
+      "main": [
+        [
+          {
+            "node": "Wait 2 Seconds",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 2 Seconds": {
+      "main": [
+        [
+          {
+            "node": "Fetch Product Detail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Product Detail": {
+      "main": [
+        [
+          {
+            "node": "Extract Product Details",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Product Details": {
+      "main": [
+        [
+          {
+            "node": "Validate Product Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Product Data": {
+      "main": [
+        [
+          {
+            "node": "Save to Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "d5e6f7g8-h9i0-4j1k-2l3m-4n5o6p7q8r9s",
+  "meta": {
+    "instanceId": "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z"
+  },
+  "id": "scraper_wireless_mouse_daraz",
+  "tags": ["scraping", "ecommerce", "daraz", "temu"]
+}

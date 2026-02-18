@@ -1,0 +1,672 @@
+{
+  "name": "fixed",
+  "nodes": [
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "eb62e937-84d0-4121-b710-b710d378bcbf",
+      "name": "Chat - Ask Product",
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -2512,
+        208
+      ],
+      "webhookId": "product-research-chat"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "product_query",
+              "name": "product_query",
+              "value": "={{ $json.chatInput }}",
+              "type": "string"
+            },
+            {
+              "id": "search_targets",
+              "name": "search_targets",
+              "value": "={{ [\n  { site: 'AliExpress', query: `${$json.chatInput} site:aliexpress.com` },\n  { site: 'Temu', query: `${$json.chatInput} site:temu.com` },\n  { site: 'Daraz', query: `${$json.chatInput} site:daraz.pk` }\n] }}",
+              "type": "array"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "6d1b440c-ec5e-49fe-9430-69760c355b2e",
+      "name": "Prepare Search URLs",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.3,
+      "position": [
+        -2288,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "search_targets",
+        "options": {}
+      },
+      "id": "5bafad48-d78d-47a4-bdb3-6102d60bf917",
+      "name": "Split Out Items",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        -2064,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "query",
+              "name": "query",
+              "value": "={{ $json.query }}",
+              "type": "string"
+            },
+            {
+              "id": "source",
+              "name": "source",
+              "value": "={{ $json.site }}",
+              "type": "string"
+            },
+            {
+              "id": "search_query",
+              "name": "search_query",
+              "value": "={{ $('Prepare Search URLs').first().json.product_query }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "acb739c7-1f84-4c97-af36-86d62d01afcd",
+      "name": "Extract Source Info",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.3,
+      "position": [
+        -1840,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://serpapi.com/search.json",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "551d32ac-b8b3-4f79-981a-2814949792b9",
+      "name": "Fetch Product Pages",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1616,
+        208
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "serp_results",
+              "name": "serp_results",
+              "value": "={{ $json.organic_results || [] }}",
+              "type": "array"
+            },
+            {
+              "id": "source_name",
+              "name": "source_name",
+              "value": "={{ $('Extract Source Info').first().json.source }}",
+              "type": "string"
+            },
+            {
+              "id": "search_query",
+              "name": "search_query",
+              "value": "={{ $('Extract Source Info').first().json.search_query }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "3f6d3fbc-fb5d-44e5-86c7-4601bce6dd15",
+      "name": "Prepare for AI",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.3,
+      "position": [
+        -1392,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are given Google SerpAPI results (organic_results array) for {{ $json.source_name }} with query \"{{ $json.search_query }}\".\nData: {{ JSON.stringify($json.serp_results, null, 2).substring(0, 6000) }}\n\nExtract products and return ONLY a JSON array with up to 10 items like:\n[\n  {\n    \"website_name\": \"{{ $json.source_name }}\",\n    \"website_url\": \"\",\n    \"product_name\": \"\",\n    \"product_url\": \"\",\n    \"price\": \"\",\n    \"currency\": \"PKR\",\n    \"availability\": \"In Stock or Out of Stock\",\n    \"rating\": 0,\n    \"number_of_reviews\": 0,\n    \"is_bestseller\": false,\n    \"review_summary\": \"\",\n    \"quality_score\": 0\n  }\n]\nRules:\n- Use SerpAPI fields: title/snippet/link/price/rating/reviews when present.\n- Always return full product_url (SerpAPI link).\n- If price is USD, convert to PKR (1 USD = 280 PKR) and set currency=PKR. If price missing, use \"N/A\".\n- Rating 0-5 scale; number_of_reviews numeric.\n- quality_score 1-10 combining rating + reviews (your best estimate).\n- Prefer items that ship to Pakistan (infer from domain or snippet).\n- Output ONLY JSON array, no markdown or extra text.\n"
+      },
+      "id": "90f8ade6-f256-4a21-aac4-ab948b9bb511",
+      "name": "Extract Products with AI",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.4,
+      "position": [
+        -1248,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "options": {}
+      },
+      "id": "c10f90f9-474a-4765-b6c0-b594db8762f0",
+      "name": "Combine All Results",
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        -624,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are a product comparison expert for Pakistani shoppers.\n\nAll Products Found (PKR):\n{{ JSON.stringify($json.data, null, 2) }}\n\nCreate a concise, PK-focused comparison:\n\n1) TOP 5 PICKS\n- Rank by quality_score, rating, number_of_reviews, and price (PKR)\n- Flag best value (low price + high rating)\n- Ensure product_url is shown\n\n2) AVAILABILITY\n- Count in-stock vs out-of-stock\n- List all in-stock options with site names\n\n3) PRICE ANALYSIS (PKR)\n- Cheapest option\n- Most expensive option\n- Average price\n- Best value for money (rating-weighted)\n\n4) BEST SELLERS\n- List all products where is_bestseller is true\n\n5) SITE COMPARISON\n- Which site (AliExpress, Temu, Daraz) is cheapest on average?\n- Which site has the highest average rating?\n\n6) FINAL RECO (for Pakistan)\n- Top 3 products with reasons (price, rating, reviews, availability)\n- Include direct product_url\n\nKeep it structured and readable."
+      },
+      "id": "afafee79-10a6-4af7-8bc0-6e926c88d2cc",
+      "name": "Analyze & Compare",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.4,
+      "position": [
+        -384,
+        -32
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract all product data from combined results\nconst items = $input.all();\nconst searchQuery = $('Chat - Ask Product').first().json.chatInput;\nconst timestamp = new Date().toISOString();\n\nconst products = [];\n\n// Process each item from Combine All Results\nfor (const item of items) {\n  const data = item.json.data;\n  \n  if (Array.isArray(data)) {\n    for (const entry of data) {\n      // Check if entry has text field with JSON\n      if (entry.text) {\n        try {\n          const parsed = JSON.parse(entry.text);\n          if (Array.isArray(parsed)) {\n            for (const product of parsed) {\n              products.push({\n                timestamp: timestamp,\n                search_query: searchQuery,\n                website_name: product.website_name || '',\n                website_url: product.website_url || '',\n                product_name: product.product_name || '',\n                product_url: product.product_url || '',\n                price: product.price || 'N/A',\n                currency: product.currency || 'PKR',\n                availability: product.availability || '',\n                rating: product.rating || 0,\n                number_of_reviews: product.number_of_reviews || 0,\n                is_bestseller: product.is_bestseller ? 'Yes' : 'No',\n                review_summary: product.review_summary || '',\n                quality_score: product.quality_score || 0\n              });\n            }\n          }\n        } catch (e) {\n          // If parsing fails, skip this entry\n          console.log('Failed to parse:', e.message);\n        }\n      }\n    }\n  }\n}\n\n// If no products found, return at least one empty row to show the search was done\nif (products.length === 0) {\n  products.push({\n    timestamp: timestamp,\n    search_query: searchQuery,\n    website_name: 'No results',\n    website_url: '',\n    product_name: 'No products found',\n    product_url: '',\n    price: 'N/A',\n    currency: 'PKR',\n    availability: 'N/A',\n    rating: 0,\n    number_of_reviews: 0,\n    is_bestseller: 'No',\n    review_summary: '',\n    quality_score: 0\n  });\n}\n\nreturn products;"
+      },
+      "id": "4a24b32f-cdbe-49c4-baf6-81c17c74eaff",
+      "name": "Format for Google Sheets",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -320,
+        368
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "1GCu68eAiU7CXWoUicCUrZ0rH3gWvWSYUalfLKiaAStQ",
+          "mode": "list",
+          "cachedResultName": "Untitled spreadsheet",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1GCu68eAiU7CXWoUicCUrZ0rH3gWvWSYUalfLKiaAStQ/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1GCu68eAiU7CXWoUicCUrZ0rH3gWvWSYUalfLKiaAStQ/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "timestamp",
+              "displayName": "timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "search_query",
+              "displayName": "search_query",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "website_name",
+              "displayName": "website_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "website_url",
+              "displayName": "website_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "product_name",
+              "displayName": "product_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "product_url",
+              "displayName": "product_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "price",
+              "displayName": "price",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "currency",
+              "displayName": "currency",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "availability",
+              "displayName": "availability",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "rating",
+              "displayName": "rating",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "number_of_reviews",
+              "displayName": "number_of_reviews",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "is_bestseller",
+              "displayName": "is_bestseller",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "review_summary",
+              "displayName": "review_summary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "quality_score",
+              "displayName": "quality_score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "bc420c00-4f07-47e5-ab27-176fc30a7c2d",
+      "name": "Save to Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [
+        -32,
+        368
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "ksYwPpWEXSY4azBo",
+          "name": "Google Sheets account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": "meta-llama/llama-3.3-70b-instruct:free",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "typeVersion": 1,
+      "position": [
+        -1248,
+        416
+      ],
+      "id": "c1d88da3-50a2-4c9e-81fb-198d5e83958b",
+      "name": "OpenRouter Chat Model",
+      "credentials": {
+        "openRouterApi": {
+          "id": "hO423oKifWCiMDA5",
+          "name": "working api key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": "meta-llama/llama-3.3-70b-instruct:free",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "typeVersion": 1,
+      "position": [
+        -400,
+        160
+      ],
+      "id": "1254c48d-58f7-4231-b23f-af8732c2fb5a",
+      "name": "OpenRouter Chat Model1",
+      "credentials": {
+        "openRouterApi": {
+          "id": "hO423oKifWCiMDA5",
+          "name": "working api key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=convert all input present in test key of given jason to json \n\n{{$json.toJsonString()}}",
+        "messages": {
+          "messageValues": [
+            {
+              "message": "=convert all input to json   {{$json.toJsonString()}} just give jason no text  also dont put '''"
+            }
+          ]
+        },
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.7,
+      "position": [
+        -960,
+        208
+      ],
+      "id": "ef93e44c-442f-43d8-85f7-4e0c5c6ad44a",
+      "name": "Basic LLM Chain"
+    },
+    {
+      "parameters": {
+        "model": "meta-llama/llama-3.3-70b-instruct:free",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "typeVersion": 1,
+      "position": [
+        -960,
+        432
+      ],
+      "id": "4231495f-7e8f-4cc7-bb20-2723f83c325b",
+      "name": "OpenRouter Chat Model2",
+      "credentials": {
+        "openRouterApi": {
+          "id": "Ow1zA8ntVaST225V",
+          "name": "qaim514"
+        }
+      }
+    }
+  ],
+  "pinData": {
+    "Extract Products with AI": [
+      {
+        "json": {
+          "text": "[]"
+        }
+      },
+      {
+        "json": {
+          "text": "[]"
+        }
+      },
+      {
+        "json": {
+          "text": "[]"
+        }
+      }
+    ],
+    "Basic LLM Chain": [
+      {
+        "json": {
+          "text": "{\"text\": \"[]\"} \n\nis already in JSON format. If you want to convert the value of the \"text\" key to a JSON array, it would be:\n\n{\"text\": []}"
+        }
+      },
+      {
+        "json": {
+          "text": "{\"text\": \"[]\"} \n\nis already in JSON format. If you want to convert the value of the \"text\" key to a JSON array, it would be:\n\n{\"text\": []}"
+        }
+      },
+      {
+        "json": {
+          "text": "{\"text\": \"[]\"} \n\nis already in JSON format. If you want to convert the value of the \"text\" key to a JSON array, it would be:\n\n{\"text\": []}"
+        }
+      }
+    ],
+    "Analyze & Compare": [
+      {
+        "json": {
+          "text": "### Pakistani Shopper's Guide\n\nGiven the provided data does not include specific product details such as quality score, rating, number of reviews, price, product URL, availability, or whether a product is a bestseller, I will create a structured template based on the questions asked. This guide will be hypothetical, assuming we have access to the necessary product information.\n\n#### 1. TOP 5 PICKS\n\nTo rank products, we consider quality score, rating, number of reviews, and price. However, without actual data, let's assume we have the following top 5 picks:\n\n| Rank | Product Name | Quality Score | Rating | Reviews | Price (PKR) | Product URL | Best Value |\n|------|--------------|---------------|--------|---------|-------------|------------|-----------|\n| 1    | Product A    | 9             | 4.8    | 1000    | 10,000      | [URL]       | Yes       |\n| 2    | Product B    | 8.5           | 4.5    | 500     | 8,000       | [URL]       | No        |\n| 3    | Product C    | 9.2           | 4.9    | 2000    | 12,000      | [URL]       | No        |\n| 4    | Product D    | 8             | 4.3    | 800     | 9,000       | [URL]       | No        |\n| 5    | Product E    | 9.5           | 4.95   | 3000    | 15,000      | [URL]       | No        |\n\n#### 2. AVAILABILITY\n\n- **In Stock:** 4 products\n- **Out of Stock:** 1 product\n- **In-Stock Options:**\n  - Site A: Product A, Product C\n  - Site B: Product B, Product D\n\n#### 3. PRICE ANALYSIS (PKR)\n\n- **Cheapest Option:** Product B (8,000 PKR)\n- **Most Expensive Option:** Product E (15,000 PKR)\n- **Average Price:** 10,800 PKR\n- **Best Value for Money:** Product A (Rating: 4.8, Price: 10,000 PKR)\n\n#### 4. BEST SELLERS\n\n- Product A\n- Product C\n\n#### 5. SITE COMPARISON\n\n- **Cheapest Site on Average:** Site B\n- **Site with Highest Average Rating:** Site A\n\n#### 6. FINAL RECO (for Pakistan)\n\nBased on price, rating, reviews, and availability, our top 3 product recommendations are:\n\n1. **Product A** - Offers the best value with a high rating and a competitive price. [Product URL]\n2. **Product C** - High quality and highly rated, though slightly more expensive. [Product URL]\n3. **Product B** - The cheapest option with a good balance of price and rating. [Product URL]\n\nThese recommendations are based on hypothetical data. Actual product details would be necessary to provide a meaningful analysis."
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Chat - Ask Product": {
+      "main": [
+        [
+          {
+            "node": "Prepare Search URLs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Search URLs": {
+      "main": [
+        [
+          {
+            "node": "Split Out Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Out Items": {
+      "main": [
+        [
+          {
+            "node": "Extract Source Info",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Source Info": {
+      "main": [
+        [
+          {
+            "node": "Fetch Product Pages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Product Pages": {
+      "main": [
+        [
+          {
+            "node": "Prepare for AI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare for AI": {
+      "main": [
+        [
+          {
+            "node": "Extract Products with AI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Products with AI": {
+      "main": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Combine All Results": {
+      "main": [
+        [
+          {
+            "node": "Analyze & Compare",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Format for Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format for Google Sheets": {
+      "main": [
+        [
+          {
+            "node": "Save to Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenRouter Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Extract Products with AI",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenRouter Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Analyze & Compare",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Basic LLM Chain": {
+      "main": [
+        [
+          {
+            "node": "Combine All Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenRouter Chat Model2": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "ed8cf731-bd4e-4478-9ab8-a0b0a3d47ad3",
+  "meta": {
+    "instanceId": "826a2a8db8a75ee7461c19d862bd3c8a0fbe505b00bb672130e4cf7642e356f2"
+  },
+  "id": "roA3xNFz4ZkBRTw9",
+  "tags": []
+}

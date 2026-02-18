@@ -1,0 +1,47 @@
+{
+  "name": "Test 5 - IF Node",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "1",
+      "name": "Start",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "return { value: 'test' };"
+      },
+      "id": "2",
+      "name": "Code",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "rules": [
+            {
+              "value1": "={{ $json.value }}",
+              "value2": "",
+              "operation": "notEmpty"
+            }
+          ]
+        }
+      },
+      "id": "3",
+      "name": "IF",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [650, 300]
+    }
+  ],
+  "connections": {
+    "Start": {"main": [[{"node": "Code", "type": "main", "index": 0}]]},
+    "Code": {"main": [[{"node": "IF", "type": "main", "index": 0}]]}
+  },
+  "active": false,
+  "settings": {}
+}

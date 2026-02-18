@@ -1,0 +1,122 @@
+{
+  "name": "fetch github trending hourly",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "triggerAtMinute": 10
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -100,
+        -100
+      ],
+      "id": "b6faa900-c4f3-4597-a3c1-10bd846c1013",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "url": "http://github-trending:8000/trending",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        120,
+        -100
+      ],
+      "id": "bc03eb80-59b9-4977-b6f6-d7e114eadaed",
+      "name": "Crawl Github Trending"
+    },
+    {
+      "parameters": {
+        "jsCode": "const now = new Date();\nconst day = now.getDate();\nconst month = now.getMonth() + 1; // Month is 0-indexed\nconst year = now.getFullYear();\nconst hour = now.getHours();\n\nconst formattedDate = `${year}-${month.toString().padStart(2,'0')}-${day.toString().padStart(2,'0')} ${hour.toString().padStart(2,'0')}:00:00`;\n\nreturn $input.all().map((item, rank) => {\n  return {...item.json, ...{\n    date: formattedDate,\n    rank: rank + 1,\n  }}\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        340,
+        -100
+      ],
+      "id": "738e070c-c419-499d-82d7-54597eb9f689",
+      "name": "Code"
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "tableId": "trending_repos",
+        "dataToSend": "autoMapInputData"
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        560,
+        -100
+      ],
+      "id": "2e676d8a-0001-4e08-b121-6bae285e7714",
+      "name": "Supabase",
+      "credentials": {
+        "supabaseApi": {
+          "id": "UrRwU1KSunTAaOc9",
+          "name": "Supabase account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Crawl Github Trending",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Crawl Github Trending": {
+      "main": [
+        [
+          {
+            "node": "Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code": {
+      "main": [
+        [
+          {
+            "node": "Supabase",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "722f697e-65f2-4810-8174-4cd54460551d",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "e503f7c3d190fbe1708ff8f5f0fb5eea84f12e45bbc30706bb7a6b25938597b3"
+  },
+  "id": "XweLVZKlgqSvXDmV",
+  "tags": []
+}

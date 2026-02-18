@@ -1,0 +1,229 @@
+{
+  "name": "Daraz Wireless Mouse Scraper - Fixed",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "trigger-node",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://www.daraz.pk/catalog/?_keyori=ss&from=input&q=wireless+mouse&spm=a2a0e.searchlist.search.go.35e34c21vwxQpK",
+        "responseFormat": "string",
+        "options": {
+          "followRedirect": true
+        },
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            },
+            {
+              "name": "Accept",
+              "value": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+            },
+            {
+              "name": "Accept-Language",
+              "value": "en-US,en;q=0.9"
+            },
+            {
+              "name": "Referer",
+              "value": "https://www.daraz.pk/"
+            },
+            {
+              "name": "DNT",
+              "value": "1"
+            }
+          ]
+        }
+      },
+      "id": "search-request",
+      "name": "Fetch Search Results",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [400, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ROBUST extraction with comprehensive error handling\ntry {\n  // Get input data from previous node\n  const input = items[0].json;\n  let html = '';\n  \n  // Try multiple ways to access the HTML content\n  if (typeof input === 'string') {\n    html = input;\n  } else if (input.data) {\n    html = String(input.data);\n  } else if (input.body) {\n    html = String(input.body);\n  } else {\n    html = JSON.stringify(input);\n  }\n  \n  console.log('HTML length: ' + html.length);\n  \n  const urls = [];\n  const seen = new Set();\n  \n  // Pattern 1: Standard Daraz product URLs\n  const regex1 = /href=['\"](\\/[^'\"\\/]+?-i\\.\\d+\\.\\d+\\.html)['\"]/gi;\n  let match;\n  \n  while ((match = regex1.exec(html)) !== null) {\n    const path = match[1];\n    if (!seen.has(path)) {\n      seen.add(path);\n      urls.push({ productUrl: 'https://www.daraz.pk' + path });\n    }\n  }\n  \n  // Pattern 2: If no results, try broader pattern\n  if (urls.length === 0) {\n    const regex2 = /href=['\"](\\/[^'\"]*?\\.html)['\"]/gi;\n    while ((match = regex2.exec(html)) !== null) {\n      const path = match[1];\n      if (path.includes('-i.') && !seen.has(path)) {\n        seen.add(path);\n        urls.push({ productUrl: 'https://www.daraz.pk' + path });\n      }\n    }\n  }\n  \n  console.log('Found ' + urls.length + ' product URLs');\n  \n  // Return results or empty array if none found\n  if (urls.length === 0) {\n    console.warn('No product URLs found - check if search page loaded correctly');\n    return [{ json: { error: 'No products found', html_preview: html.substring(0, 500) } }];\n  }\n  \n  return urls.slice(0, 10).map(u => ({ json: u }));\n  \n} catch (error) {\n  console.error('Error in Extract Product URLs: ' + error.message);\n  return [{ json: { error: error.message, stack: error.stack } }];\n}"
+      },
+      "id": "parse-urls",
+      "name": "Extract Product URLs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [600, 300]
+    },
+    {
+      "parameters": {
+        "batchSize": 1
+      },
+      "id": "split-batch",
+      "name": "Split In Batches",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 1,
+      "position": [800, 300]
+    },
+    {
+      "parameters": {
+        "amount": 3,
+        "unit": "seconds"
+      },
+      "id": "wait-node",
+      "name": "Wait 3 Seconds",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [1000, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{$json[\"productUrl\"]}}",
+        "responseFormat": "string",
+        "options": {
+          "followRedirect": true
+        },
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            },
+            {
+              "name": "Accept",
+              "value": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8"
+            },
+            {
+              "name": "Accept-Language",
+              "value": "en-US,en;q=0.9"
+            },
+            {
+              "name": "Accept-Encoding",
+              "value": "gzip, deflate, br"
+            },
+            {
+              "name": "Referer",
+              "value": "https://www.daraz.pk/"
+            },
+            {
+              "name": "DNT",
+              "value": "1"
+            },
+            {
+              "name": "Connection",
+              "value": "keep-alive"
+            },
+            {
+              "name": "Upgrade-Insecure-Requests",
+              "value": "1"
+            },
+            {
+              "name": "Sec-Fetch-Dest",
+              "value": "document"
+            },
+            {
+              "name": "Sec-Fetch-Mode",
+              "value": "navigate"
+            },
+            {
+              "name": "Sec-Fetch-Site",
+              "value": "same-origin"
+            },
+            {
+              "name": "Cache-Control",
+              "value": "max-age=0"
+            }
+          ]
+        }
+      },
+      "id": "product-request",
+      "name": "Fetch Product Details",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [1200, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ROBUST product data extraction with error handling\ntry {\n  // Get HTML from HTTP response\n  const input = items[0].json;\n  let html = '';\n  \n  if (typeof input === 'string') {\n    html = input;\n  } else if (input.data) {\n    html = String(input.data);\n  } else if (input.body) {\n    html = String(input.body);\n  } else {\n    html = JSON.stringify(input);\n  }\n  \n  function extract(pattern, defaultVal = null) {\n    try {\n      const match = html.match(pattern);\n      return match ? match[1].trim() : defaultVal;\n    } catch (e) {\n      return defaultVal;\n    }\n  }\n  \n  // Try to extract from embedded JSON (Daraz uses window.__INITIAL_STATE__)\n  let jsonData = null;\n  try {\n    const stateMatch = html.match(/window\\.__INITIAL_STATE__\\s*=\\s*({.+?});/s);\n    if (stateMatch) {\n      jsonData = JSON.parse(stateMatch[1]);\n      console.log('Found JSON state data');\n    }\n  } catch (e) {\n    console.log('No JSON state, using HTML extraction');\n  }\n  \n  // Extract from JSON if available\n  let name = null;\n  let price = null;\n  let image = null;\n  let rating = '0';\n  let reviews = '0';\n  \n  if (jsonData && jsonData.pageModule) {\n    name = jsonData.pageModule.title || jsonData.pageModule.name;\n    price = jsonData.pageModule.price || (jsonData.pageModule.priceAmount && jsonData.pageModule.priceAmount.value);\n    image = jsonData.pageModule.imagePath || (jsonData.pageModule.images && jsonData.pageModule.images[0]);\n    rating = String(jsonData.pageModule.rating || '0');\n    reviews = String(jsonData.pageModule.reviewCount || '0');\n  }\n  \n  // Fallback to HTML regex extraction\n  if (!name) name = extract(/\"name\"\\s*:\\s*\"([^\"]+)\"/) || extract(/property=\"og:title\"[^>]*content=\"([^\"]+)\"/i) || extract(/<h1[^>]*>\\s*([^<]+)/i) || 'Product';\n  if (!price) price = extract(/\"price\"\\s*:\\s*([0-9,.]+)/) || extract(/₨\\s*([0-9,]+)/) || extract(/Rs\\.?\\s*([0-9,]+)/) || '0';\n  if (!image) image = extract(/\"image\"\\s*:\\s*\"(https?:\\/\\/[^\"]+)\"/) || extract(/property=\"og:image\"[^>]*content=\"([^\"]+)\"/i) || '';\n  if (rating === '0') rating = extract(/\"ratingValue\"\\s*:\\s*([0-9.]+)/) || extract(/\"rating\"\\s*:\\s*([0-9.]+)/) || '0';\n  if (reviews === '0') reviews = extract(/\"reviewCount\"\\s*:\\s*(\\d+)/) || '0';\n  \n  const productUrl = $node[\"Split In Batches\"].json.productUrl || 'unknown';\n  \n  return [{\n    json: {\n      name: String(name).substring(0, 200),\n      price: String(price).replace(/,/g, ''),\n      image: String(image),\n      rating: parseFloat(rating) || 0,\n      reviews: parseInt(reviews) || 0,\n      url: productUrl,\n      source: 'Daraz',\n      date: new Date().toISOString().split('T')[0]\n    }\n  }];\n  \n} catch (error) {\n  console.error('Error extracting product data: ' + error.message);\n  return [{\n    json: {\n      name: 'Error',\n      price: '0',\n      image: '',\n      rating: 0,\n      reviews: 0,\n      url: '',\n      source: 'Daraz',\n      date: new Date().toISOString().split('T')[0],\n      error: error.message\n    }\n  }];\n}"
+      },
+      "id": "extract-data",
+      "name": "Extract Product Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1400, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json[\"name\"]}}",
+              "operation": "notEmpty"
+            },
+            {
+              "value1": "={{$json[\"price\"]}}",
+              "operation": "notEmpty"
+            }
+          ]
+        }
+      },
+      "id": "validate-node",
+      "name": "Validate Product",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1600, 300]
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "sheetId": "YOUR_GOOGLE_SHEET_ID_HERE",
+        "range": "Sheet1!A:H",
+        "options": {},
+        "valueInputMode": "USER_ENTERED"
+      },
+      "id": "sheets-node",
+      "name": "Save to Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [1800, 300],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Google Sheets Account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [[{ "node": "Fetch Search Results", "type": "main", "index": 0 }]]
+    },
+    "Fetch Search Results": {
+      "main": [[{ "node": "Extract Product URLs", "type": "main", "index": 0 }]]
+    },
+    "Extract Product URLs": {
+      "main": [[{ "node": "Split In Batches", "type": "main", "index": 0 }]]
+    },
+    "Split In Batches": {
+      "main": [[{ "node": "Wait 3 Seconds", "type": "main", "index": 0 }]]
+    },
+    "Wait 3 Seconds": {
+      "main": [[{ "node": "Fetch Product Details", "type": "main", "index": 0 }]]
+    },
+    "Fetch Product Details": {
+      "main": [[{ "node": "Extract Product Data", "type": "main", "index": 0 }]]
+    },
+    "Extract Product Data": {
+      "main": [[{ "node": "Validate Product", "type": "main", "index": 0 }]]
+    },
+    "Validate Product": {
+      "main": [[{ "node": "Save to Google Sheets", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

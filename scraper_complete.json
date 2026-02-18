@@ -1,0 +1,310 @@
+{
+  "name": "Product Scraper - Temu & Daraz - Complete Flow",
+  "nodes": [
+    {
+      "parameters": {},
+      "name": "Start",
+      "type": "n8n-nodes-base.start",
+      "typeVersion": 1,
+      "position": [50, 50]
+    },
+    {
+      "parameters": {},
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [250, 50]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://google.serper.dev/search",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "serpApiApi",
+        "queryParameters": {
+          "q": "=wireless mouse (site:temu.com OR site:daraz.pk)",
+          "num": "10",
+          "gl": "pk"
+        }
+      },
+      "name": "SerpAPI Search",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [450, 50]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "conversion": "json",
+        "fromKey": "={{ $json.organic }}"
+      },
+      "name": "Extract Results",
+      "type": "n8n-nodes-base.itemLists",
+      "typeVersion": 3,
+      "position": [650, 50]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "assignments": {
+          "assignments": [
+            {
+              "name": "search_query",
+              "value": "wireless mouse",
+              "type": "string"
+            },
+            {
+              "name": "product_name",
+              "value": "={{ $json.title }}",
+              "type": "expression"
+            },
+            {
+              "name": "rating",
+              "value": "={{ parseFloat($json.rating) || 0 }}",
+              "type": "expression"
+            },
+            {
+              "name": "reviews",
+              "value": "={{ parseInt($json.reviewCount) || 0 }}",
+              "type": "expression"
+            },
+            {
+              "name": "url",
+              "value": "={{ $json.link }}",
+              "type": "expression"
+            },
+            {
+              "name": "platform",
+              "value": "={{ $json.link.includes('daraz') ? 'Daraz' : 'Temu' }}",
+              "type": "expression"
+            },
+            {
+              "name": "quality_score",
+              "value": "={{ parseFloat($json.rating) >= 4.5 ? 'High' : (parseFloat($json.rating) >= 3.0 ? 'Medium' : 'Low') }}",
+              "type": "expression"
+            },
+            {
+              "name": "timestamp",
+              "value": "={{ new Date().toISOString() }}",
+              "type": "expression"
+            },
+            {
+              "name": "min_price",
+              "value": "=N/A",
+              "type": "string"
+            },
+            {
+              "name": "comparison_group",
+              "value": "=Pakistan Market",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "name": "Transform Fields",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.2,
+      "position": [800, 50]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "={{ $json.rating }}",
+            "operator": {
+              "type": "number",
+              "operation": "gte"
+            },
+            "rightValue": 4
+          }
+        }
+      },
+      "name": "Filter Satisfaction",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 1,
+      "position": [950, 50]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "assignments": {
+          "assignments": [
+            {
+              "name": "analysis_prompt",
+              "value": "=Product Analysis Request:\n\nProduct: {{ $json.product_name }}\nPlatform: {{ $json.platform }}\nRating: {{ $json.rating }}/5 stars\nReview Count: {{ $json.reviews }}\nQuality: {{ $json.quality_score }}\nLink: {{ $json.url }}\n\nProvide brief analysis (max 200 words):\n1. Pros\n2. Cons  \n3. Recommendation (Buy/Skip)\n4. Best Alternatives\n\nWrite for Pakistani customers.",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "name": "Prepare Analysis",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.2,
+      "position": [1100, 50]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4-turbo",
+        "prompt": "={{ $json.analysis_prompt }}"
+      },
+      "name": "AI Analysis",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 3,
+      "position": [1250, 50]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "assignments": {
+          "assignments": [
+            {
+              "name": "ai_analysis",
+              "value": "={{ $json.text || 'No analysis available' }}",
+              "type": "expression"
+            }
+          ]
+        }
+      },
+      "name": "Format Output",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.2,
+      "position": [1400, 50]
+    },
+    {
+      "parameters": {
+        "authentication": "oauth2",
+        "resource": "spreadsheet",
+        "operation": "append",
+        "spreadsheetId": "={{ $secrets.GOOGLE_SHEETS_ID }}",
+        "range": "Sheet1",
+        "columns": {
+          "mappingMode": "defineByMapperObject",
+          "value": {
+            "search_query": "={{ $json.search_query }}",
+            "timestamp": "={{ $json.timestamp }}",
+            "product_name": "={{ $json.product_name }}",
+            "price": "=N/A",
+            "rating": "={{ $json.rating }}",
+            "url": "={{ $json.url }}",
+            "platform": "={{ $json.platform }}",
+            "reviews": "={{ $json.reviews }}",
+            "quality_score": "={{ $json.quality_score }}",
+            "min_price": "={{ $json.min_price }}",
+            "comparison_group": "={{ $json.comparison_group }}",
+            "ai_analysis": "={{ $json.ai_analysis }}"
+          }
+        }
+      },
+      "name": "Save to Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [1550, 50]
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Manual Trigger",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "SerpAPI Search",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SerpAPI Search": {
+      "main": [
+        [
+          {
+            "node": "Extract Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Results": {
+      "main": [
+        [
+          {
+            "node": "Transform Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Transform Fields": {
+      "main": [
+        [
+          {
+            "node": "Filter Satisfaction",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Satisfaction": {
+      "main": [
+        [
+          {
+            "node": "Prepare Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Analysis": {
+      "main": [
+        [
+          {
+            "node": "AI Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Analysis": {
+      "main": [
+        [
+          {
+            "node": "Format Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Output": {
+      "main": [
+        [
+          {
+            "node": "Save to Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

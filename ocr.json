@@ -1,0 +1,362 @@
+{
+  "name": "Connected PDF Parser & Chat",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "manual-trigger",
+      "name": "Start Ingestion",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -480,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "fileSelector": "/path/to/your/BSARIN-1ST-1M--consolidated-result.pdf"
+      },
+      "id": "read-file",
+      "name": "Read PDF File",
+      "type": "n8n-nodes-base.readBinaryFiles",
+      "typeVersion": 1,
+      "position": [
+        -260,
+        240
+      ],
+      "notes": "Step 1: Read the file"
+    },
+    {
+      "parameters": {},
+      "id": "pdf-extract",
+      "name": "Extract Text",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        240
+      ],
+      "notes": "Step 2: Parse PDF to Text"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "You are a Data Extractor.\n\nInput Text:\n{{ $json.text }}\n\nTask: Extract a JSON array of students from this text.\n\nEach student object must strictly follow this structure:\n- \"roll_no\" (string)\n- \"name\" (string)\n- \"sgpa\" (number)\n- \"result\" (string)\n\nReturn ONLY the JSON array.",
+        "hasOutputParser": true
+      },
+      "id": "ai-extractor",
+      "name": "Structure Data with AI",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.4,
+      "position": [
+        160,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "jsonSchema": "{\n  \"type\": \"array\",\n  \"items\": {\n    \"type\": \"object\",\n    \"properties\": {\n      \"roll_no\": { \"type\": \"string\" },\n      \"name\": { \"type\": \"string\" },\n      \"sgpa\": { \"type\": \"number\" },\n      \"result\": { \"type\": \"string\" }\n    },\n    \"required\": [\"roll_no\", \"name\", \"sgpa\", \"result\"]\n  }\n}"
+      },
+      "id": "output-parser",
+      "name": "Structured Output Parser",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1,
+      "position": [
+        180,
+        460
+      ]
+    },
+    {
+      "parameters": {
+        "modelName": "gemini-1.5-flash"
+      },
+      "id": "gemini-model",
+      "name": "Gemini Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        140,
+        660
+      ],
+      "credentials": {
+        "googleGeminiOAuth2Api": {
+          "id": "YOUR_GOOGLE_CREDENTIAL_ID",
+          "name": "Google Gemini account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "schema": {
+          "__rl": true,
+          "value": "public",
+          "mode": "list"
+        },
+        "table": {
+          "__rl": true,
+          "value": "student_results",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "roll_no",
+              "displayName": "roll_no",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "name",
+              "displayName": "name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "sgpa",
+              "displayName": "sgpa",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "result",
+              "displayName": "result",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "db-insert",
+      "name": "Save to DB",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        500,
+        240
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "YOUR_POSTGRES_CREDENTIAL_ID",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "chat-trigger",
+      "name": "Chat Trigger",
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -480,
+        800
+      ],
+      "webhookId": "b1c2d3e4-f5g6-7h8i-9j0k-l1m2n3o4p5q6"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.chatInput }}",
+        "options": {
+          "systemMessage": "You are a Result Assistant.\nUse the 'database_tool' to fetch student information from the DB.\nAnswer the user's question based on the data retrieved."
+        }
+      },
+      "id": "ai-agent",
+      "name": "AI Data Analyst",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.6,
+      "position": [
+        -200,
+        800
+      ]
+    },
+    {
+      "parameters": {
+        "name": "database_tool",
+        "description": "Access the student_results table to answer questions about student data, grades, and results.",
+        "workflowId": {
+          "__rl": true,
+          "value": "CURRENT",
+          "mode": "list"
+        }
+      },
+      "id": "db-tool-node",
+      "name": "Database Tool",
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 1.1,
+      "position": [
+        40,
+        960
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "db-tool-trigger",
+      "name": "When tool is called",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        -200,
+        1140
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM student_results LIMIT 100;"
+      },
+      "id": "get-data",
+      "name": "Get Student Data",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        20,
+        1140
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "YOUR_POSTGRES_CREDENTIAL_ID",
+          "name": "Postgres account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Start Ingestion": {
+      "main": [
+        [
+          {
+            "node": "Read PDF File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read PDF File": {
+      "main": [
+        [
+          {
+            "node": "Extract Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Text": {
+      "main": [
+        [
+          {
+            "node": "Structure Data with AI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Structure Data with AI",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Structure Data with AI",
+            "type": "ai_languageModel",
+            "index": 0
+          },
+          {
+            "node": "AI Data Analyst",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structure Data with AI": {
+      "main": [
+        [
+          {
+            "node": "Save to DB",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chat Trigger": {
+      "main": [
+        [
+          {
+            "node": "AI Data Analyst",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Database Tool": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Data Analyst",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When tool is called": {
+      "main": [
+        [
+          {
+            "node": "Get Student Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2025-12-11T00:00:00.000Z",
+  "versionId": "1"
+}

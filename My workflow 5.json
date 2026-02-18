@@ -1,0 +1,273 @@
+{
+  "name": "My workflow 5",
+  "nodes": [
+    {
+      "parameters": {
+        "operation": "pdf",
+        "binaryPropertyName": "upload_folder",
+        "options": {}
+      },
+      "id": "9ea3a8ec-f696-4ab6-b710-8e0154a373e4",
+      "name": "Extract Text",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        -1136,
+        128
+      ],
+      "notes": "Step 2: Parse PDF to Text"
+    },
+    {
+      "parameters": {
+        "formTitle": "up",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "upload folder",
+              "fieldType": "file",
+              "acceptFileTypes": ".pdf, .png , .csv"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.3,
+      "position": [
+        -1360,
+        128
+      ],
+      "id": "b494349c-72a0-4d96-9f46-7ad313bb1754",
+      "name": "On form submission",
+      "webhookId": "d17e136f-a7d6-4003-ac24-a9b85c53851d"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{$json }}",
+        "options": {
+          "systemMessage": "You are a data-extraction assistant.\n\nYou receive OCR tables containing three layers:\n\nTop Row = Credit Hours\nExample: 4 3 3 3 3 2 3\n\nMiddle Row = Subject Codes\nExample: ARIN-1102, ARIN-2178, MATH-1121, FPM-00092, FAL-00281, FIA-00291, ARIN-1102\n\nLowest Row = Student Information Columns\nThese fields must be extracted as they appear:\n\nRoll No.\n\nStudent Name\n\nParentage\n\nMarks Q.P (repeated for each subject)\n\nC Q.P\n\nP Q.P\n\nT Q.P\n\nSGPA\n\nCGPA\n\nGrade C\n\nT.M P\n\nT.M T\n\nT.M C\n\n% Age T\n\n% Age C\n\nResult\n\nRemarks\n\nYour tasks:\n\nRead the OCR input and identify:\n• Credit Hours\n• Subject Codes\n• Marks Q.P (each subject’s Q.P value from the lowest row)\n\nMap each subject in order:\nCredit Hour[i] → Subject Code[i] → Q.P[i]\n\nProduce only clean text JSON (no code fences, no ```json) using this structure:\n\n{\n\"Roll No.\": \"\",\n\"Student Name\": \"\",\n\"Parentage\": \"\",\n\"Subjects\": [\n{\n\"subject_code\": \"\",\n\"credit_hours\": \"\",\n\"qp_marks\": \"\"\n}\n],\n\"C_QP\": \"\",\n\"P_QP\": \"\",\n\"T_QP\": \"\",\n\"SGPA\": \"\",\n\"CGPA\": \"\",\n\"Grade C\": \"\",\n\"T.M P\": \"\",\n\"T.M T\": \"\",\n\"T.M C\": \"\",\n\"% Age T\": \"\",\n\"% Age C\": \"\",\n\"Result\": \"\",\n\"Remarks\": \"\"\n}\n\nStrict Rules:\n\nOutput only JSON as plain text.\n\nNo ```json or code formatting.\n\nNo extra explanation, only the JSON.\n\nDo not change any column names.\n\nMissing data must be null.\n\nIf multiple students appear, return a JSON array.\n\nIf OCR is unclear, guess the closest value and include “confidence”: “low” inside that field.\n\nAfter generating the JSON, your job is to make it ready for SQL insertion in PostgreSQL.\n\nYou must always structure the JSON so n8n can send it into the Insert Row operation in PostgreSQL.\n\nOutput must remain simple text JSON only — nothing else."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3,
+      "position": [
+        -912,
+        128
+      ],
+      "id": "a7d17afc-448c-4198-9a11-1c26e5464a4e",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "model": "tngtech/deepseek-r1t2-chimera:free",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "typeVersion": 1,
+      "position": [
+        -840,
+        352
+      ],
+      "id": "bfca54c7-63f4-4303-a625-2c94d02d9d8f",
+      "name": "OpenRouter Chat Model",
+      "credentials": {
+        "openRouterApi": {
+          "id": "hO423oKifWCiMDA5",
+          "name": "working api key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "schema": {
+          "__rl": true,
+          "value": "public",
+          "mode": "list",
+          "cachedResultName": "public"
+        },
+        "table": {
+          "__rl": true,
+          "value": "student_results",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "roll_no",
+              "displayName": "roll_no",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "name",
+              "displayName": "name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "sgpa",
+              "displayName": "sgpa",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "result",
+              "displayName": "result",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "98e8a79c-9684-46ca-b757-388c97ceeb8c",
+      "name": "Save to DB1",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        -112,
+        128
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "Pft0vAPkpIb4IGZe",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return items.map(item => {\n  let raw = item.json.output || \"\";\n\n  // 1) Remove backtick fences\n  raw = raw.replace(/```json/gi, \"\").replace(/```/g, \"\").trim();\n\n  // 2) Quick remove of actual newline chars (if any)\n  raw = raw.replace(/\\r/g, \"\").replace(/\\n/g, \"\");\n\n  // helper to try parse safely\n  const tryParse = (s) => {\n    try { return { ok: true, value: JSON.parse(s) }; }\n    catch (e) { return { ok: false, error: e }; }\n  };\n\n  // 3) First try: raw as-is\n  let result = tryParse(raw);\n\n  // 4) If first parse failed, un-escape common escaped sequences and try again\n  if (!result.ok) {\n    let cleaned = raw\n      // remove escaped newlines/tabs/carriage returns\n      .replace(/\\\\n/g, \"\")\n      .replace(/\\\\r/g, \"\")\n      .replace(/\\\\t/g, \"\")\n      // unescape quotes commonly produced in nested JSON strings\n      .replace(/\\\\\"/g, '\"')\n      .replace(/\\\\'/g, \"'\")\n      .trim();\n\n    // If it's wrapped in quotes (a quoted JSON string), strip them\n    if (cleaned.startsWith('\"') && cleaned.endsWith('\"')) {\n      cleaned = cleaned.slice(1, -1).trim();\n    }\n\n    // try parse cleaned\n    result = tryParse(cleaned);\n\n    // if parsed and value is a string that itself contains JSON, try parse again\n    if (result.ok && typeof result.value === \"string\") {\n      const secondTry = tryParse(result.value.replace(/\\\\n/g, \"\").replace(/\\\\r/g, \"\").trim());\n      if (secondTry.ok) result = secondTry;\n    }\n\n    // if still not ok, set raw to cleaned for fallback\n    raw = cleaned;\n  }\n\n  // 5) Set output: parsed JSON when possible, otherwise cleaned string\n  item.json.output = result.ok ? result.value : raw;\n\n  return item;\n});\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -560,
+        128
+      ],
+      "id": "0ffa07bd-2cb8-4377-b39b-6b0d6e03bd4b",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 1. Your raw input data\nconst rawData = [\n  {\n    {{$input.first().json.output}}\n  }\n];\n\n// 2. Parse the inner JSON string\n// We take the first element [0], access .output, and parse that string\nconst studentsList = JSON.parse(rawData[0].output);\n\n// 3. Example: Log the first student's name and their first subject\nconsole.log(\"Name:\", studentsList[0][\"Student Name\"]);\nconsole.log(\"First Subject:\", studentsList[0][\"Subjects\"][0].subject_code);\n\n/* Output:\nName: AUN MUHAMMAD\nFirst Subject: ARIN-1102\n*/"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -336,
+        128
+      ],
+      "id": "9a4ea2bc-892d-4e41-ad6d-fda6e9e168c0",
+      "name": "Code in JavaScript1"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Extract Text": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "On form submission": {
+      "main": [
+        [
+          {
+            "node": "Extract Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenRouter Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "Save to DB1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "d39f3bdf-3f8e-46b3-8f5e-5002360b0a69",
+  "meta": {
+    "instanceId": "826a2a8db8a75ee7461c19d862bd3c8a0fbe505b00bb672130e4cf7642e356f2"
+  },
+  "id": "emhle68OSi4sta1J",
+  "tags": []
+}

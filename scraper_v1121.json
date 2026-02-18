@@ -1,0 +1,162 @@
+{
+  "name": "Daraz Wireless Mouse Scraper v1.121",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "uuid-1",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://www.daraz.pk/search?q=wireless+mouse",
+        "method": "GET",
+        "headers": {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+          "Accept-Language": "en-US,en;q=0.9",
+          "Referer": "https://www.daraz.pk/"
+        }
+      },
+      "id": "uuid-2",
+      "name": "Fetch Search Page",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const html = $input.first().body;\nconst products = [];\nconst regex = /href=['\\\"](\\/p\\/[^'\\\"]*)['\\\"][^>]*>\\s*<[^>]*class=['\\\"][^'\\\"]*title[^'\\\"]*['\\\"]>([^<]+)</g;\nlet match;\nwhile ((match = regex.exec(html)) !== null) {\n  products.push({\n    url: 'https://www.daraz.pk' + match[1],\n    title: match[2].trim()\n  });\n}\nreturn { products: products.slice(0, 10) };"
+      },
+      "id": "uuid-3",
+      "name": "Parse Products",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "products"
+      },
+      "id": "uuid-4",
+      "name": "Split Products",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "length": 3
+      },
+      "id": "uuid-5",
+      "name": "Delay",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [1050, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "method": "GET",
+        "headers": {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+          "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9",
+          "Referer": "https://www.daraz.pk/"
+        }
+      },
+      "id": "uuid-6",
+      "name": "Fetch Product",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1250, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const html = $input.first().body;\nconst product = {\n  title: '',\n  price: '',\n  rating: 0,\n  url: $json.url\n};\n\ntry {\n  const titleMatch = html.match(/<h1[^>]*>([^<]+)<\\/h1>/);\n  product.title = titleMatch ? titleMatch[1].trim() : '';\n  \n  const priceMatch = html.match(/₨\\s*([0-9,]+)/);\n  product.price = priceMatch ? priceMatch[1] : '';\n  \n  const ratingMatch = html.match(/\\\"rating\\\"\\s*:\\s*([0-9.]+)/);\n  product.rating = ratingMatch ? parseFloat(ratingMatch[1]) : 0;\n} catch(e) {\n  product.error = e.message;\n}\n\nreturn product;"
+      },
+      "id": "uuid-7",
+      "name": "Extract Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1450, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "rules": [
+            {
+              "value1": "={{ $json.title }}",
+              "value2": "",
+              "operation": "notEmpty"
+            },
+            {
+              "value1": "={{ $json.price }}",
+              "value2": "",
+              "operation": "notEmpty"
+            }
+          ]
+        }
+      },
+      "id": "uuid-8",
+      "name": "Validate",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1650, 300]
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "value": "YOUR_GOOGLE_SHEET_ID",
+          "mode": "list"
+        },
+        "sheetName": {
+          "value": "gid=0",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": null
+        }
+      },
+      "id": "uuid-9",
+      "name": "Save to Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [1850, 300],
+      "credentials": {
+        "googleSheetsOAuth2Api": "YOUR_CREDENTIAL_ID"
+      }
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [[{"node": "Fetch Search Page", "type": "main", "index": 0}]]
+    },
+    "Fetch Search Page": {
+      "main": [[{"node": "Parse Products", "type": "main", "index": 0}]]
+    },
+    "Parse Products": {
+      "main": [[{"node": "Split Products", "type": "main", "index": 0}]]
+    },
+    "Split Products": {
+      "main": [[{"node": "Delay", "type": "main", "index": 0}]]
+    },
+    "Delay": {
+      "main": [[{"node": "Fetch Product", "type": "main", "index": 0}]]
+    },
+    "Fetch Product": {
+      "main": [[{"node": "Extract Data", "type": "main", "index": 0}]]
+    },
+    "Extract Data": {
+      "main": [[{"node": "Validate", "type": "main", "index": 0}]]
+    },
+    "Validate": {
+      "main": [[{"node": "Save to Sheets", "type": "main", "index": 0}]]
+    }
+  },
+  "active": false,
+  "settings": {"executionOrder": "v1"}
+}

@@ -1,0 +1,271 @@
+{
+  "name": "Product Scraper - Temu & Daraz - Full Flow",
+  "nodes": [
+    {
+      "parameters": {},
+      "name": "Start",
+      "type": "n8n-nodes-base.start",
+      "typeVersion": 1,
+      "position": [50, 50]
+    },
+    {
+      "parameters": {},
+      "name": "Chat Trigger",
+      "type": "n8n-nodes-base.chatTrigger",
+      "typeVersion": 1,
+      "position": [250, 50]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Configure search parameters using chat input when present\nconst inItems = $input.all();\nconst chat = inItems[0]?.json || {};\nconst search_query = chat.chatInput || chat.message || 'wireless mouse';\nreturn [{ json: {\n  search_query,\n  country: 'pk',\n  locale: 'en',\n  num: 15,\n  siteFilter: '(site:temu.com OR site:daraz.pk)'\n} }];"
+      },
+      "name": "Search Params",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [350, 50]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://serpapi.com/search.json",
+        "responseFormat": "json",
+        "authentication": "none",
+        "jsonParameters": false,
+        "sendQuery": true,
+        "options": {
+          "timeout": 30000
+        },
+        "queryParametersUi": {
+          "parameter": [
+            { "name": "engine", "value": "google" },
+            { "name": "q", "value": "={{ $json.search_query + ' ' + $json.siteFilter }}" },
+            { "name": "gl", "value": "={{ $json.country }}" },
+            { "name": "hl", "value": "={{ $json.locale }}" },
+            { "name": "num", "value": "={{ $json.num }}" },
+            { "name": "api_key", "value": "={{ $secrets.SERP_API_KEY }}" }
+          ]
+        }
+      },
+      "name": "SerpAPI Search",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [450, 50]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Normalize SerpAPI response. Prefer shopping_results; fallback to organic_results.\nconst results = $input.all();\nconst out = [];\nfor (const r of results) {\n  const j = r.json || {};\n  const shopping = Array.isArray(j.shopping_results) ? j.shopping_results : [];\n  const organic = Array.isArray(j.organic_results) ? j.organic_results : [];\n  const items = shopping.length ? shopping : organic;\n  for (const it of items) {\n    // Map common fields\n    const link = it.link || it.product_link || it.source || '';\n    const title = it.title || it.name || it.product_title || it.snippet || '';\n    const price = it.price || it.extracted_price || it.price_str || 'N/A';\n    const rating = parseFloat(it.rating || it.rating_value || it.stars || 0) || 0;\n    const reviews = parseInt(it.reviews || it.review_count || it.rating_count || 0) || 0;\n    out.push({ json: { title, link, price, rating, reviews } });\n  }\n}\nreturn out;"
+      },
+      "name": "Extract Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [650, 50]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const it = $input.item();\nconst rating = parseFloat(it.json.rating || 0) || 0;\nconst reviews = parseInt(it.json.reviews || 0) || 0;\nconst url = it.json.link || '';\nconst price = it.json.price || 'N/A';\nconst platform = url.includes('daraz') ? 'Daraz' : (url.includes('temu') ? 'Temu' : 'Unknown');\nconst satisfaction = Math.round((rating / 5) * 100);\nconst quality = rating >= 4.5 ? 'High' : (rating >= 3.0 ? 'Medium' : 'Low');\nconst paired = $items(0, 1)?.[0]?.json || {};\nconst search_query = paired.search_query || 'wireless mouse';\nreturn {\n  search_query,\n  product_name: it.json.title || '',\n  rating,\n  reviews,\n  satisfaction,\n  price,\n  url,\n  platform,\n  quality_score: quality,\n  timestamp: new Date().toISOString(),\n  comparison_group: 'Pakistan Market'\n};"
+      },
+      "name": "Transform Fields",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [800, 50]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ $json[\"rating\"] }}",
+              "operation": "largerEqual",
+              "value2": 4
+            },
+            {
+              "value1": "={{ $json[\"satisfaction\"] }}",
+              "operation": "largerEqual",
+              "value2": 80
+            }
+          ]
+        }
+      },
+      "name": "Filter High Satisfaction",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [950, 50]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const p = $input.item().json;\nconst prompt = `Analyze this product for a buyer comparing Temu vs Daraz in Pakistan.\n\nProduct Name: ${p.product_name}\nPlatform: ${p.platform}\nPrice: ${p.price}\nRating: ${p.rating}/5\nSatisfaction: ${p.satisfaction}%\nReviews: ${p.reviews}\nQuality Tier: ${p.quality_score}\nURL: ${p.url}\n\nProvide:\n1) Pros and cons focusing on reliability and delivery in PK.\n2) Value-for-money (1-10) and reasoning.\n3) Clear verdict (Buy/Consider/Skip).\n4) If better options exist on the other platform, suggest 2 alternatives.\nKeep it concise and actionable.`;\nreturn { ...p, comparison_prompt: prompt };"
+      },
+      "name": "Generate Comparison Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1100, 50]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "responseFormat": "json",
+        "authentication": "none",
+        "jsonParameters": true,
+        "sendBody": true,
+        "bodyParametersJson": "={{ { model: 'gpt-4o-mini', messages: [ { role: 'user', content: $json.comparison_prompt } ] } }}",
+        "headerParametersUi": {
+          "parameter": [
+            { "name": "Authorization", "value": "=Bearer {{$secrets.OPENAI_API_KEY}}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        }
+      },
+      "name": "AI Analysis",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1250, 50]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const it = $input.item();\nconst j = it.json || {};\nconst content = j.choices?.[0]?.message?.content || j.choices?.[0]?.text || j.output_text || '';\nreturn { ...j, ai_analysis: content || 'No analysis available' };"
+      },
+      "name": "Merge Analysis",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1400, 50]
+    },
+    {
+      "parameters": {
+        "authentication": "oauth2",
+        "resource": "spreadsheet",
+        "operation": "append",
+        "spreadsheetId": "={{ $secrets.GOOGLE_SHEETS_ID }}",
+        "range": "Sheet1",
+        "columns": {
+          "mappingMode": "autoMapInputData"
+        }
+      },
+      "name": "Append to Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [1550, 50]
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Chat Trigger",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chat Trigger": {
+      "main": [
+        [
+          {
+            "node": "Search Params",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search Params": {
+      "main": [
+        [
+          {
+            "node": "SerpAPI Search",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SerpAPI Search": {
+      "main": [
+        [
+          {
+            "node": "Extract Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Results": {
+      "main": [
+        [
+          {
+            "node": "Transform Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Transform Fields": {
+      "main": [
+        [
+          {
+            "node": "Filter High Satisfaction",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter High Satisfaction": {
+      "main": [
+        [
+          {
+            "node": "Generate Comparison Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Comparison Data": {
+      "main": [
+        [
+          {
+            "node": "AI Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Analysis": {
+      "main": [
+        [
+          {
+            "node": "Merge Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Analysis": {
+      "main": [
+        [
+          {
+            "node": "Append to Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

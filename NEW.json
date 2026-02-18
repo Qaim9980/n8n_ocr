@@ -1,0 +1,292 @@
+{
+	"name": "Wireless Mouse SerpAPI Aggregator",
+	"nodes": [
+		{
+			"parameters": {},
+			"id": "Manual Trigger",
+			"name": "Manual Trigger",
+			"type": "n8n-nodes-base.manualTrigger",
+			"typeVersion": 1,
+			"position": [80, 300]
+		},
+		{
+			"parameters": {
+				"keepOnlySet": true,
+				"values": {
+					"string": [
+						{
+							"name": "query",
+							"value": "Wireless Mouse"
+						},
+						{
+							"name": "serpapi_api_key",
+							"value": ""
+						}
+					]
+				},
+				"options": {}
+			},
+			"id": "Config",
+			"name": "Config",
+			"type": "n8n-nodes-base.set",
+			"typeVersion": 2,
+			"position": [260, 300]
+		},
+		{
+			"parameters": {
+				"method": "GET",
+				"url": "https://serpapi.com/search.json",
+				"responseFormat": "json",
+				"jsonParameters": true,
+				"sendQuery": true,
+				"queryParametersJson": "={\"engine\":\"google\",\"q\":$json.query + ' site:daraz.com',\"api_key\":($json.serpapi_api_key || $env.SERPAPI_KEY),\"gl\":\"pk\",\"hl\":\"en\",\"num\":50}",
+				"options": {}
+			},
+			"id": "Daraz",
+			"name": "Daraz",
+			"type": "n8n-nodes-base.httpRequest",
+			"typeVersion": 4,
+			"position": [560, 120]
+		},
+		{
+			"parameters": {
+				"method": "GET",
+				"url": "https://serpapi.com/search.json",
+				"responseFormat": "json",
+				"jsonParameters": true,
+				"sendQuery": true,
+				"queryParametersJson": "={\"engine\":\"aliexpress\",\"q\":$json.query,\"api_key\":($json.serpapi_api_key || $env.SERPAPI_KEY),\"page\":1}",
+				"options": {}
+			},
+			"id": "AliExpress",
+			"name": "AliExpress",
+			"type": "n8n-nodes-base.httpRequest",
+			"typeVersion": 4,
+			"position": [560, 300]
+		},
+		{
+			"parameters": {
+				"method": "GET",
+				"url": "https://serpapi.com/search.json",
+				"responseFormat": "json",
+				"jsonParameters": true,
+				"sendQuery": true,
+				"queryParametersJson": "={\"engine\":\"google\",\"q\":$json.query + ' site:temu.com',\"api_key\":($json.serpapi_api_key || $env.SERPAPI_KEY),\"gl\":\"us\",\"hl\":\"en\",\"num\":50}",
+				"options": {}
+			},
+			"id": "Temu",
+			"name": "Temu",
+			"type": "n8n-nodes-base.httpRequest",
+			"typeVersion": 4,
+			"position": [560, 480]
+		},
+		{
+			"parameters": {
+				"mode": "append"
+			},
+			"id": "Merge DA",
+			"name": "Merge DA",
+			"type": "n8n-nodes-base.merge",
+			"typeVersion": 2,
+			"position": [780, 220]
+		},
+		{
+			"parameters": {
+				"mode": "append"
+			},
+			"id": "Merge All",
+			"name": "Merge All",
+			"type": "n8n-nodes-base.merge",
+			"typeVersion": 2,
+			"position": [920, 320]
+		},
+		{
+			"parameters": {
+				"jsCode": "// Normalize results from SerpAPI for Google (Daraz/Temu) and AliExpress engines\nconst out = []\nfor (const input of items) {\n  const engine = input.json?.search_parameters?.engine || 'google'\n  if (engine === 'aliexpress') {\n    const list = input.json?.organic_results || []\n    for (const p of list) {\n      if (!p.product_link) continue\n      out.push({ json: {\n        platform: 'AliExpress',\n        product_name: p.product_title || p.title || 'Not Available',\n        brand: p.store_name || p.brand || 'Not Available',\n        price: p.price || 'Not Available',\n        rating: p.rating || null,\n        total_reviews: p.reviews || p.reviews_count || null,\n        estimated_sales: p.orders || p.orders_count || 'Not Available',\n        product_url: p.product_link,\n        summary: p.description || 'Not Available'\n      }})\n    }\n  } else {\n    const list = input.json?.shopping_results || input.json?.organic_results || []\n    for (const p of list) {\n      const link = p.link || p.product_link\n      if (!link) continue\n      const host = (new URL(link)).hostname || ''\n      let platform = 'Google'\n      if (host.includes('daraz')) platform = 'Daraz'\n      if (host.includes('temu')) platform = 'Temu'\n      out.push({ json: {\n        platform,\n        product_name: p.title || p.name || 'Not Available',\n        brand: p.source || p.brand || 'Not Available',\n        price: p.price || p.extracted_price || 'Not Available',\n        rating: p.rating || p.stars || null,\n        total_reviews: p.reviews || p.rating_count || null,\n        estimated_sales: p.best_seller ? 'Best Seller' : (p.total_orders || 'Not Available'),\n        product_url: link,\n        summary: p.product_details || p.snippet || 'Not Available'\n      }})\n    }\n  }\n}\nreturn out"
+			},
+			"id": "Normalize",
+			"name": "Normalize",
+			"type": "n8n-nodes-base.code",
+			"typeVersion": 2,
+			"position": [1100, 320]
+		},
+		{
+			"parameters": {
+				"jsCode": "// Filter to products with reviews, rating, URL, and relevance\nconst seen = new Set()\nconst out = []\nfor (const item of items) {\n  const j = item.json\n  if (!j.product_url || !j.product_name) continue\n  if (j.product_name && !/mouse/i.test(j.product_name)) continue\n  if (j.total_reviews == null || j.total_reviews === 'Not Available') continue\n  if (j.rating == null || j.rating === 'Not Available') continue\n  const key = j.product_url\n  if (seen.has(key)) continue\n  seen.add(key)\n  out.push(item)\n}\nreturn out"
+			},
+			"id": "Filter",
+			"name": "Filter",
+			"type": "n8n-nodes-base.code",
+			"typeVersion": 2,
+			"position": [1240, 300]
+		},
+		{
+			"parameters": {
+				"jsCode": "// Classify quality and cap counts: 30 high, 30 medium, 30 low, max 100\nconst high = []\nconst medium = []\nconst low = []\nfor (const item of items) {\n  const j = item.json\n  const rating = Number(j.rating)\n  const reviews = Number(j.total_reviews)\n  let quality = 'Low'\n  if (rating >= 4.5 && reviews >= 100) quality = 'High'\n  else if (rating >= 4.0 && rating < 4.5 && reviews >= 30 && reviews <= 99) quality = 'Medium'\n  else quality = 'Low'\n  j.quality_category = quality\n  j.quality_reason = quality === 'High' ? 'Rating >=4.5 and reviews >=100' : quality === 'Medium' ? 'Rating 4.0-4.4 and reviews 30-99' : 'Rating <4.0 or reviews <30'\n  if (quality === 'High' && high.length < 30) high.push(j)\n  else if (quality === 'Medium' && medium.length < 30) medium.push(j)\n  else if (quality === 'Low' && low.length < 30) low.push(j)\n}\nconst products = [...high, ...medium, ...low].slice(0, 100)\nreturn [{ json: { high_quality: high, medium_quality: medium, low_quality: low, products } }]"
+			},
+			"id": "Classify",
+			"name": "Classify",
+			"type": "n8n-nodes-base.code",
+			"typeVersion": 2,
+			"position": [1460, 300]
+		},
+		{
+			"parameters": {
+				"jsCode": "// Prepare final schema\nconst j = items[0].json\nreturn [{ json: {\n  search_query: 'Wireless Mouse',\n  total_products: j.products.length,\n  high_quality: j.high_quality,\n  medium_quality: j.medium_quality,\n  low_quality: j.low_quality,\n  products: j.products\n}}]"
+			},
+			"id": "Finalize",
+			"name": "Finalize",
+			"type": "n8n-nodes-base.code",
+			"typeVersion": 2,
+			"position": [1680, 300]
+		},
+		{
+			"parameters": {
+				"respondWith": "lastNode",
+				"responseCode": 200,
+				"options": {}
+			},
+			"id": "Respond",
+			"name": "Respond",
+			"type": "n8n-nodes-base.httpResponse",
+			"typeVersion": 2,
+			"position": [1860, 300]
+		}
+	],
+	"connections": {
+		"Manual Trigger": {
+			"main": [
+				[
+					{
+						"node": "Config",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		},
+		"Config": {
+			"main": [
+				[
+					{
+						"node": "Daraz",
+						"type": "main",
+						"index": 0
+					},
+					{
+						"node": "AliExpress",
+						"type": "main",
+						"index": 0
+					},
+					{
+						"node": "Temu",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		},
+		"Daraz": {
+			"main": [
+				[
+					{
+						"node": "Merge DA",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		},
+		"AliExpress": {
+			"main": [
+				[
+					{
+						"node": "Merge DA",
+						"type": "main",
+						"index": 1
+					}
+				]
+			]
+		},
+		"Temu": {
+			"main": [
+				[
+					{
+						"node": "Merge All",
+						"type": "main",
+						"index": 1
+					}
+				]
+			]
+		},
+		"Merge DA": {
+			"main": [
+				[
+					{
+						"node": "Merge All",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		},
+		"Merge All": {
+			"main": [
+				[
+					{
+						"node": "Normalize",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		},
+		"Normalize": {
+			"main": [
+				[
+					{
+						"node": "Filter",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		},
+		"Filter": {
+			"main": [
+				[
+					{
+						"node": "Classify",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		},
+		"Classify": {
+			"main": [
+				[
+					{
+						"node": "Finalize",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		},
+		"Finalize": {
+			"main": [
+				[
+					{
+						"node": "Respond",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		}
+	},
+	"active": false,
+	"settings": {},
+	"versionId": "v1"
+}

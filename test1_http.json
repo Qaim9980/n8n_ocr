@@ -1,0 +1,29 @@
+{
+  "name": "Test 1 - HTTP Request Only",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "1",
+      "name": "Start",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://www.daraz.pk",
+        "method": "GET"
+      },
+      "id": "2",
+      "name": "HTTP",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [450, 300]
+    }
+  ],
+  "connections": {
+    "Start": {"main": [[{"node": "HTTP", "type": "main", "index": 0}]]}
+  },
+  "active": false,
+  "settings": {}
+}
